@@ -12,4 +12,5 @@ models/*.tflite
 models/*.cc
 
 results/*.json
+results/*.csv
 figures/*.png
