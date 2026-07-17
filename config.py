@@ -47,7 +47,7 @@ DS2_RECORDS = [
     "233", "234",
 ]
 
-DS1_VAL_RECORDS = ["114", "116", "118", "124", "201", "207", "209", "215"]
+DS1_VAL_RECORDS = ["118", "124", "205", "223"]
 DS1_TRAIN_RECORDS = [r for r in DS1_RECORDS if r not in DS1_VAL_RECORDS]
 
 ALL_RECORDS = sorted(DS1_RECORDS + DS2_RECORDS + PACED_RECORDS, key=int)
