@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+data/raw/
+data/processed/
+
+models/*.h5
+models/*.keras
+models/*.tflite
+models/*.cc
+
+results/*.json
+figures/*.png
