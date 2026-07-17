@@ -9,13 +9,13 @@ from dataset import load_dataset
 from evaluate import evaluate_predictions
 
 
-def representative_dataset(x_train, n=400, seed=0):
+def representative_dataset(x_train, rr_train, n=400, seed=0):
     rng = np.random.default_rng(seed)
     idx = rng.choice(x_train.shape[0], size=min(n, x_train.shape[0]), replace=False)
 
     def generator():
         for i in idx:
-            yield [x_train[i : i + 1].astype(np.float32)]
+            yield [x_train[i : i + 1].astype(np.float32), rr_train[i : i + 1].astype(np.float32)]
 
     return generator
 
@@ -36,18 +36,24 @@ def convert_dynamic(model):
     return converter.convert()
 
 
-def tflite_predict(tflite_bytes, x):
+def _feed(detail, values):
+    scale, zero = detail["quantization"]
+    if detail["dtype"] == np.int8 and scale > 0:
+        values = np.clip(np.round(values / scale + zero), -128, 127)
+    return values.astype(detail["dtype"])
+
+
+def tflite_predict(tflite_bytes, x, rr):
     interpreter = tf.lite.Interpreter(model_content=tflite_bytes)
     interpreter.allocate_tensors()
-    inp = interpreter.get_input_details()[0]
+    inputs = interpreter.get_input_details()
+    beat_in = next(d for d in inputs if len(d["shape"]) == 3)
+    rr_in = next(d for d in inputs if len(d["shape"]) == 2)
     out = interpreter.get_output_details()[0]
-    scale, zero = inp["quantization"]
     preds = np.empty(x.shape[0], dtype=np.int64)
     for i in range(x.shape[0]):
-        sample = x[i : i + 1]
-        if inp["dtype"] == np.int8:
-            sample = np.clip(np.round(sample / scale + zero), -128, 127).astype(np.int8)
-        interpreter.set_tensor(inp["index"], sample.astype(inp["dtype"]))
+        interpreter.set_tensor(beat_in["index"], _feed(beat_in, x[i : i + 1]))
+        interpreter.set_tensor(rr_in["index"], _feed(rr_in, rr[i : i + 1]))
         interpreter.invoke()
         preds[i] = int(np.argmax(interpreter.get_tensor(out["index"])[0]))
     return preds
@@ -61,18 +67,18 @@ def main():
 
     name = args.name or __import__("pathlib").Path(args.model).stem
     data = load_dataset()
-    x_train = data["train"][0]
-    x_test, y_test = data["test"]
+    train, test = data["train"], data["test"]
+    x_test, rr_test, y_test = test["x"], test["rr"], test["y"]
     model = tf.keras.models.load_model(args.model)
 
     result = {"model": name}
-    rep_gen = representative_dataset(x_train)
+    rep_gen = representative_dataset(train["x"], train["rr"])
 
     try:
         int8_bytes = convert_int8(model, rep_gen)
         int8_path = MODELS_DIR / f"{name}_int8.tflite"
         int8_path.write_bytes(int8_bytes)
-        report = evaluate_predictions(y_test, tflite_predict(int8_bytes, x_test), f"{name}_int8", save=True)
+        report = evaluate_predictions(y_test, tflite_predict(int8_bytes, x_test, rr_test), f"{name}_int8", save=True)
         result["int8"] = {
             "path": str(int8_path),
             "size_bytes": len(int8_bytes),
@@ -87,7 +93,7 @@ def main():
     dyn_bytes = convert_dynamic(model)
     dyn_path = MODELS_DIR / f"{name}_dynamic.tflite"
     dyn_path.write_bytes(dyn_bytes)
-    dyn_report = evaluate_predictions(y_test, tflite_predict(dyn_bytes, x_test), f"{name}_dynamic", save=False)
+    dyn_report = evaluate_predictions(y_test, tflite_predict(dyn_bytes, x_test, rr_test), f"{name}_dynamic", save=False)
     result["dynamic_range"] = {
         "path": str(dyn_path),
         "size_bytes": len(dyn_bytes),

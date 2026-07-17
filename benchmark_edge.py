@@ -5,7 +5,7 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from config import MODELS_DIR, RESULTS_DIR, WINDOW_LENGTH
+from config import MODELS_DIR, RESULTS_DIR
 
 CORTEX_M4_CLOCK_HZ = {"64MHz": 64e6, "80MHz": 80e6}
 MACS_PER_CYCLE_INT8 = 1.0
@@ -21,15 +21,12 @@ def dense_macs(input_dim, units):
 
 def analytic_macs(model):
     total = 0
-    prev = None
     for layer in model.layers:
-        cfg = layer.get_config()
-        if layer.__class__.__name__ == "GRU":
-            total += gru_macs(1, cfg["units"], WINDOW_LENGTH)
-            prev = cfg["units"]
-        elif layer.__class__.__name__ == "Dense":
-            total += dense_macs(prev, cfg["units"])
-            prev = cfg["units"]
+        cls = layer.__class__.__name__
+        if cls == "GRU":
+            total += gru_macs(layer.input.shape[-1], layer.units, layer.input.shape[1])
+        elif cls == "Dense":
+            total += dense_macs(layer.input.shape[-1], layer.units)
     return total
 
 

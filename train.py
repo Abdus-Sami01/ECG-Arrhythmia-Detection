@@ -14,22 +14,22 @@ NSVF_LABELS = [AAMI_CLASSES.index(c) for c in ("N", "S", "V", "F")]
 
 
 class MacroF1(tf.keras.callbacks.Callback):
-    def __init__(self, x_val, y_val):
+    def __init__(self, inputs, y_val):
         super().__init__()
-        self.x_val = x_val
+        self.inputs = inputs
         self.y_val = y_val
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs if logs is not None else {}
-        y_pred = np.argmax(self.model.predict(self.x_val, verbose=0), axis=1)
+        y_pred = np.argmax(self.model.predict(self.inputs, verbose=0), axis=1)
         logs["val_macro_f1"] = macro_f1(self.y_val, y_pred, labels=NSVF_LABELS)
 
 
-def class_weights(y):
+def class_weights(y, cap=50.0):
     classes = np.arange(len(AAMI_CLASSES))
     present = np.unique(y)
     weights = compute_class_weight("balanced", classes=present, y=y)
-    lookup = {int(c): float(w) for c, w in zip(present, weights)}
+    lookup = {int(c): min(float(w), cap) for c, w in zip(present, weights)}
     return {int(c): lookup.get(int(c), 0.0) for c in classes}
 
 
@@ -47,8 +47,10 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     data = load_dataset()
-    x_train, y_train = data["train"]
-    x_val, y_val = data["val"]
+    train, val = data["train"], data["val"]
+    train_inputs = {"beat": train["x"], "rr": train["rr"]}
+    val_inputs = {"beat": val["x"], "rr": val["rr"]}
+    y_train, y_val = train["y"], val["y"]
 
     model = build_gru(hidden_size=args.hidden_size)
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="sparse_categorical_crossentropy", metrics=["accuracy"])
@@ -56,15 +58,15 @@ def main():
 
     model_path = MODELS_DIR / f"gru{args.hidden_size}.keras"
     callbacks = [
-        MacroF1(x_val, y_val),
+        MacroF1(val_inputs, y_val),
         tf.keras.callbacks.ModelCheckpoint(str(model_path), monitor="val_macro_f1", mode="max", save_best_only=True),
         tf.keras.callbacks.EarlyStopping(monitor="val_macro_f1", mode="max", patience=args.patience, restore_best_weights=True),
         tf.keras.callbacks.ReduceLROnPlateau(monitor="val_macro_f1", mode="max", factor=0.5, patience=5, min_lr=1e-5),
     ]
 
     history = model.fit(
-        x_train, y_train,
-        validation_data=(x_val, y_val),
+        train_inputs, y_train,
+        validation_data=(val_inputs, y_val),
         epochs=args.epochs,
         batch_size=args.batch_size,
         class_weight=class_weights(y_train),

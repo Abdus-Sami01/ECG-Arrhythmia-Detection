@@ -37,6 +37,20 @@ def _select_lead(record):
     return record.p_signal[:, 0]
 
 
+def _rr_features(samples):
+    rr = np.diff(samples) / SAMPLING_RATE
+    pre = np.concatenate([[np.nan], rr])
+    post = np.concatenate([rr, [np.nan]])
+    avg = np.nanmean(rr) if rr.size else 1.0
+    kernel = np.ones(11) / 11.0
+    padded = np.pad(pre, (5, 5), mode="edge")
+    local = np.convolve(np.nan_to_num(padded, nan=avg), kernel, mode="valid")
+    local = np.where(local > 0, local, avg)
+    pre = np.nan_to_num(pre, nan=avg)
+    post = np.nan_to_num(post, nan=avg)
+    return np.stack([pre / avg, post / avg, pre / local, post / local], axis=1)
+
+
 def segment_record(record_id):
     record = wfdb.rdrecord(str(RAW_DIR / record_id))
     annotation = wfdb.rdann(str(RAW_DIR / record_id), "atr")
@@ -44,28 +58,34 @@ def segment_record(record_id):
     signal = _bandpass(_select_lead(record).astype(np.float64))
     signal = (signal - signal.mean()) / (signal.std() + 1e-8)
 
-    windows, labels = [], []
-    for sample, symbol in zip(annotation.sample, annotation.symbol):
-        aami = SYMBOL_TO_AAMI.get(symbol)
-        if aami is None:
-            continue
+    beats = [(s, CLASS_TO_INDEX[a]) for s, sym in zip(annotation.sample, annotation.symbol)
+             if (a := SYMBOL_TO_AAMI.get(sym)) is not None]
+    samples = np.array([b[0] for b in beats])
+    rr = _rr_features(samples)
+
+    windows, rr_kept, labels = [], [], []
+    for i, (sample, label) in enumerate(beats):
         start, end = sample - WINDOW_BEFORE, sample + WINDOW_AFTER
         if start < 0 or end > signal.shape[0]:
             continue
         windows.append(signal[start:end])
-        labels.append(CLASS_TO_INDEX[aami])
+        rr_kept.append(rr[i])
+        labels.append(label)
 
-    x = np.asarray(windows, dtype=np.float32)
-    y = np.asarray(labels, dtype=np.int64)
-    return x, y
+    return (
+        np.asarray(windows, dtype=np.float32),
+        np.asarray(rr_kept, dtype=np.float32),
+        np.asarray(labels, dtype=np.int64),
+    )
 
 
 def build_split(record_ids):
     per_record = {r: segment_record(r) for r in record_ids}
     x = np.concatenate([v[0] for v in per_record.values()], axis=0)
-    y = np.concatenate([v[1] for v in per_record.values()], axis=0)
-    counts = {r: np.bincount(v[1], minlength=len(AAMI_CLASSES)).tolist() for r, v in per_record.items()}
-    return x, y, counts
+    x_rr = np.concatenate([v[1] for v in per_record.values()], axis=0)
+    y = np.concatenate([v[2] for v in per_record.values()], axis=0)
+    counts = {r: np.bincount(v[2], minlength=len(AAMI_CLASSES)).tolist() for r, v in per_record.items()}
+    return x, x_rr, y, counts
 
 
 def class_distribution(y):
@@ -81,15 +101,15 @@ def main():
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    x_train, y_train, train_counts = build_split(DS1_TRAIN_RECORDS)
-    x_val, y_val, val_counts = build_split(DS1_VAL_RECORDS)
-    x_test, y_test, test_counts = build_split(DS2_RECORDS)
+    x_train, rr_train, y_train, train_counts = build_split(DS1_TRAIN_RECORDS)
+    x_val, rr_val, y_val, val_counts = build_split(DS1_VAL_RECORDS)
+    x_test, rr_test, y_test, test_counts = build_split(DS2_RECORDS)
 
     np.savez_compressed(
         args.output,
-        x_train=x_train[..., np.newaxis], y_train=y_train,
-        x_val=x_val[..., np.newaxis], y_val=y_val,
-        x_test=x_test[..., np.newaxis], y_test=y_test,
+        x_train=x_train[..., np.newaxis], rr_train=rr_train, y_train=y_train,
+        x_val=x_val[..., np.newaxis], rr_val=rr_val, y_val=y_val,
+        x_test=x_test[..., np.newaxis], rr_test=rr_test, y_test=y_test,
     )
 
     summary = {

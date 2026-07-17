@@ -55,10 +55,10 @@ def main():
     args = parser.parse_args()
 
     name = args.name or __import__("pathlib").Path(args.model).stem
-    x_test, y_test = load_dataset()["test"]
+    test = load_dataset()["test"]
     model = tf.keras.models.load_model(args.model)
-    y_pred = np.argmax(model.predict(x_test, verbose=0), axis=1)
-    evaluate_predictions(y_test, y_pred, name)
+    y_pred = np.argmax(model.predict({"beat": test["x"], "rr": test["rr"]}, verbose=0), axis=1)
+    evaluate_predictions(test["y"], y_pred, name)
 
 
 if __name__ == "__main__":
