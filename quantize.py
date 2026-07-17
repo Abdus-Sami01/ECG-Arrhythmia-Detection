@@ -7,6 +7,15 @@ import tensorflow as tf
 from config import MODELS_DIR, RESULTS_DIR
 from dataset import load_dataset
 from evaluate import evaluate_predictions
+from model import build_gru
+
+
+def unrolled_twin(model):
+    gru = next(l for l in model.layers if l.__class__.__name__ == "GRU")
+    dense_units = next(l.units for l in model.layers if l.__class__.__name__ == "Dense")
+    twin = build_gru(hidden_size=gru.units, dense_units=dense_units, unroll=True)
+    twin.set_weights(model.get_weights())
+    return twin
 
 
 def representative_dataset(x_train, rr_train, n=400, seed=0):
@@ -15,7 +24,7 @@ def representative_dataset(x_train, rr_train, n=400, seed=0):
 
     def generator():
         for i in idx:
-            yield [x_train[i : i + 1].astype(np.float32), rr_train[i : i + 1].astype(np.float32)]
+            yield {"beat": x_train[i : i + 1].astype(np.float32), "rr": rr_train[i : i + 1].astype(np.float32)}
 
     return generator
 
@@ -69,7 +78,7 @@ def main():
     data = load_dataset()
     train, test = data["train"], data["test"]
     x_test, rr_test, y_test = test["x"], test["rr"], test["y"]
-    model = tf.keras.models.load_model(args.model)
+    model = unrolled_twin(tf.keras.models.load_model(args.model))
 
     result = {"model": name}
     rep_gen = representative_dataset(train["x"], train["rr"])
