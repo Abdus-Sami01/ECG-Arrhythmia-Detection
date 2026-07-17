@@ -40,9 +40,17 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--patience", type=int, default=12)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--model-path", default=None)
     args = parser.parse_args()
 
-    tf.keras.utils.set_random_seed(args.seed)
+    model_path = args.model_path or str(MODELS_DIR / f"gru{args.hidden_size}.keras")
+    _, best = train_model(args.hidden_size, model_path, args.epochs, args.batch_size, args.patience, args.seed)
+    print(f"\nbest val macro-F1 (N,S,V,F): {best:.4f}")
+    print(f"saved model to {model_path}")
+
+
+def train_model(hidden_size, model_path, epochs=60, batch_size=128, patience=12, seed=42, verbose=2):
+    tf.keras.utils.set_random_seed(seed)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -52,33 +60,26 @@ def main():
     val_inputs = {"beat": val["x"], "rr": val["rr"]}
     y_train, y_val = train["y"], val["y"]
 
-    model = build_gru(hidden_size=args.hidden_size)
+    model = build_gru(hidden_size=hidden_size)
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-    model.summary()
 
-    model_path = MODELS_DIR / f"gru{args.hidden_size}.keras"
     callbacks = [
         MacroF1(val_inputs, y_val),
-        tf.keras.callbacks.ModelCheckpoint(str(model_path), monitor="val_macro_f1", mode="max", save_best_only=True),
-        tf.keras.callbacks.EarlyStopping(monitor="val_macro_f1", mode="max", patience=args.patience, restore_best_weights=True),
+        tf.keras.callbacks.ModelCheckpoint(model_path, monitor="val_macro_f1", mode="max", save_best_only=True),
+        tf.keras.callbacks.EarlyStopping(monitor="val_macro_f1", mode="max", patience=patience, restore_best_weights=True),
         tf.keras.callbacks.ReduceLROnPlateau(monitor="val_macro_f1", mode="max", factor=0.5, patience=5, min_lr=1e-5),
     ]
 
     history = model.fit(
         train_inputs, y_train,
         validation_data=(val_inputs, y_val),
-        epochs=args.epochs,
-        batch_size=args.batch_size,
+        epochs=epochs,
+        batch_size=batch_size,
         class_weight=class_weights(y_train),
         callbacks=callbacks,
-        verbose=2,
+        verbose=verbose,
     )
-
-    best = float(np.max(history.history["val_macro_f1"]))
-    history_path = RESULTS_DIR / f"gru{args.hidden_size}_history.json"
-    history_path.write_text(json.dumps({k: [float(v) for v in vs] for k, vs in history.history.items()}, indent=2))
-    print(f"\nbest val macro-F1 (N,S,V,F): {best:.4f}")
-    print(f"saved model to {model_path}")
+    return model, float(np.max(history.history["val_macro_f1"]))
 
 
 if __name__ == "__main__":

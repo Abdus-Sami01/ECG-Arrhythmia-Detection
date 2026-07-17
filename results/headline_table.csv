@@ -1,0 +1,4 @@
+model,params,float32_size_kb,int8_size_kb,tensor_arena_kb,macro_f1_float,macro_f1_int8,macs_per_inference,desktop_latency_ms
+GRU-32,4901,19.1,145.4,0.0,0.3012,0.3026,73232,0.019
+GRU-16,1765,6.9,115.8,0.0,0.4313,0.4355,22864,0.015
+GRU-8,773,3.0,100.8,0.0,0.3876,0.3868,8048,0.015
