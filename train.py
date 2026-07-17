@@ -49,7 +49,7 @@ def main():
     print(f"saved model to {model_path}")
 
 
-def train_model(hidden_size, model_path, epochs=60, batch_size=128, patience=12, seed=42, verbose=2):
+def train_model(hidden_size, model_path, epochs=60, batch_size=128, patience=12, seed=42, verbose=2, build_fn=None):
     tf.keras.utils.set_random_seed(seed)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,7 +60,7 @@ def train_model(hidden_size, model_path, epochs=60, batch_size=128, patience=12,
     val_inputs = {"beat": val["x"], "rr": val["rr"]}
     y_train, y_val = train["y"], val["y"]
 
-    model = build_gru(hidden_size=hidden_size)
+    model = (build_fn or build_gru)(hidden_size)
     model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
     callbacks = [
