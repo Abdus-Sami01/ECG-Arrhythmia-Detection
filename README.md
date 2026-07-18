@@ -94,6 +94,22 @@ FC is the floor, as expected, despite the most parameters.
 
 ![Accuracy vs int8 size](figures/accuracy_vs_size.png)
 
+## Results — CNN size sweep (the deployment tradeoff curve)
+
+Having found the CNN is the right family, the same multi-seed, validation-selected protocol
+sweeps its width. int8, DS2 held-out patients.
+
+| Model | Params | int8 size | Macro-F1 (int8) | 3-seed test mean ± std |
+|---|---:|---:|---:|---:|
+| CNN-8 | 685 | 7.7 KB | 0.550 | 0.537 ± 0.025 |
+| **CNN-16** | 1,845 | 9.3 KB | **0.596** | 0.568 ± 0.025 |
+| CNN-32 | 6,085 | 14.3 KB | 0.576 | 0.532 ± 0.048 |
+
+CNN-16 is the sweet spot; CNN-32 begins to overfit (lower mean, higher variance) on the scarce
+minority classes. The floor is striking: **even CNN-8 at 7.7 KB beats every GRU variant** (best
+GRU 0.42). For the tightest flash budget, CNN-8 is a defensible 7.7 KB choice; CNN-16 is the
+recommended default.
+
 ## The recommended model — CNN-16, int8, 9.3 KB (DS2)
 
 | Class | Support | Sensitivity | Specificity | PPV | F1 |
@@ -124,6 +140,7 @@ python preprocess.py           # -> data/processed/mitbih_ds1ds2.npz
 python sweep.py                # 3-seed GRU-32/16/8 sweep, validation-selected
 python build_table.py          # GRU quantization + edge table -> results/
 python baseline_compare.py     # CNN / LSTM / FC comparison -> results/
+python cnn_sweep.py            # CNN-8/16/32 size sweep -> results/
 python make_figures.py         # figures/
 ```
 
@@ -154,7 +171,8 @@ metrics.py           per-class sensitivity/specificity/PPV/F1, macro-F1
 evaluate.py          DS2 evaluation + confusion matrix
 quantize.py          int8 TFLite conversion (unrolled twin for RNNs), accuracy cost
 benchmark_edge.py    flash size, MAC count, simulated Cortex-M4 latency
-sweep.py             multi-seed architecture sweep, validation-based selection
+sweep.py             multi-seed GRU architecture sweep, validation-based selection
+cnn_sweep.py         CNN width sweep (filters 8/16/32), validation-based selection
 build_table.py       headline size/accuracy/latency table
 baseline_compare.py  matched-scale baseline comparison
 make_figures.py      accuracy-vs-size and confusion figures

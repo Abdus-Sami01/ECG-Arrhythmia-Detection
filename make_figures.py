@@ -12,14 +12,16 @@ def main():
     gru = json.loads((RESULTS_DIR / "headline_table.json").read_text())
     baselines = json.loads((RESULTS_DIR / "baseline_comparison.json").read_text())
 
+    cnn = json.loads((RESULTS_DIR / "cnn_sweep.json").read_text())
     points = [(r["model"], r["int8_size_kb"], r["macro_f1_int8"], "GRU sweep") for r in gru]
+    points += [(r["model"], r["int8_size_kb"], r["macro_f1_int8"], "CNN sweep") for r in cnn]
     for r in baselines:
-        if r["model"] == "gru16":
+        if r["model"] in ("gru16", "cnn16"):
             continue
-        family = "CNN" if r["model"].startswith("cnn") else "LSTM" if r["model"].startswith("lstm") else "FC"
+        family = "LSTM" if r["model"].startswith("lstm") else "FC"
         points.append((r["model"], r["int8_size_kb"], r["macro_f1_int8"], family))
 
-    colors = {"GRU sweep": "#1f77b4", "CNN": "#2ca02c", "LSTM": "#ff7f0e", "FC": "#d62728"}
+    colors = {"GRU sweep": "#1f77b4", "CNN sweep": "#2ca02c", "LSTM": "#ff7f0e", "FC": "#d62728"}
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
     for family in colors:
         pts = [p for p in points if p[3] == family]
