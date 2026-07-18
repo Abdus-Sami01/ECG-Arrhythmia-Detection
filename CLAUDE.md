@@ -2,7 +2,7 @@
 
 ## Absolute rules (non-negotiable)
 1. **Nothing stays untracked.** After every unit of work `git status` is clean: code and docs committed, generated artifacts (`data/`, `models/`, `results/`, `figures/`) covered by `.gitignore`. No stray files.
-2. **Commits are one-liner messages, authored as the owner, never co-authored.** No `Co-Authored-By` trailer, no "Claude" attribution. Author identity is `abdus-sami01 <muhammadabdulsami7@gmail.com>`. Cryptographic signing uses the owner's GPG key (`315ECD1899DE017F`); the private key is not present in the build sandbox, so commits are made unsigned here and re-signed locally by the owner. Git is configured (`user.signingkey`, `gpg.format openpgp`) so `git rebase --exec 'git commit --amend --no-edit -S'` re-signs cleanly.
+2. **Commits are one-liner messages, authored as the owner, never co-authored, and land verified.** No `Co-Authored-By` trailer, no "Claude" attribution, and the word "Claude" never appears in any git operation — message, branch name, tag, or otherwise. Author identity is `abdus-sami01 <muhammadabdulsami7@gmail.com>`. The owner's GPG private key (`315ECD1899DE017F`) is not present in the build sandbox and must never be pasted in, so commits are created through the GitHub API, which signs them with GitHub's key and shows them **Verified**. Branch is `main` and generic names only — never a `claude/`-prefixed branch.
 3. **Comments only when the code genuinely cannot speak for itself, and then one line.** No narration of what the next line does. A comment carries a constraint, a citation, or a non-obvious reason — nothing else.
 4. **Excellence over speed.** Iteration count and elapsed time are free; correctness and rigor are the only targets. Never rush a result into place; get it right.
 
